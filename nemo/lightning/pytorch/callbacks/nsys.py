@@ -67,6 +67,15 @@ class NsysCallback(Callback):
             f'and end_step: {self._nsys_profile_end_step}'
         )
 
+        import os
+        from workload_inspector.bkg_runner import BackgroundRunner
+        from workload_inspector.torch.nsys_downstream import NsysDownstream
+
+        nsys_bg_thread = NsysDownstream(
+            os.getenv('NSYS_LOG_DIR', None), os.getenv('GPU_KERN_STATS_OUTPUT_DIR', None), "stdev"
+        )
+        self.bg_runner = BackgroundRunner(nsys_bg_thread)
+
     def on_train_batch_start(self, trainer, pl_module, batch, batch_idx: int) -> Optional[int]:
         """PyTorch Lightning hook:
         https://pytorch-lightning.readthedocs.io/en/stable/common/lightning_module.html#on-train-batch-start
@@ -97,3 +106,5 @@ class NsysCallback(Callback):
                 logging.info("====== End nsys profiling ======")
                 torch.cuda.cudart().cudaProfilerStop()
                 torch.autograd.profiler.emit_nvtx().__exit__(None, None, None)
+                self.bg_runner.start_background_task(args=None)
+                self.bg_runner.join_background_task()
