@@ -71,9 +71,13 @@ class NsysCallback(Callback):
         from workload_inspector.bkg_runner import BackgroundRunner
         from workload_inspector.torch.nsys_downstream import NsysDownstream
 
-        nsys_bg_thread = NsysDownstream(
-            os.getenv('NSYS_LOG_DIR', None), os.getenv('GPU_KERN_STATS_OUTPUT_DIR', None), "stdev"
-        )
+        log_dir = os.getenv('NSYS_LOG_DIR')
+        kern_stats_dir = os.getenv('GPU_KERN_STATS_OUTPUT_DIR')
+
+        if log_dir is not None and kern_stats_dir is not None:
+            nsys_bg_thread = NsysDownstream(directory=log_dir, gpu_shared_kern_dir=kern_stats_dir, heuristic="stdev")
+        else:
+            nsys_bg_thread = None
         self.bg_runner = BackgroundRunner(nsys_bg_thread)
 
     def on_train_batch_start(self, trainer, pl_module, batch, batch_idx: int) -> Optional[int]:
