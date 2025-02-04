@@ -20,6 +20,9 @@ from lightning.pytorch.callbacks.callback import Callback
 from nemo.utils import logging
 from nemo.utils.get_rank import get_rank
 
+import os
+from workload_inspector.bkg_runner import BackgroundRunner
+from workload_inspector.torch.nsys_downstream import NsysDownstream
 
 def get_current_epoch_step(trainer) -> int:
     """
@@ -79,6 +82,10 @@ class NsysCallback(Callback):
             f'and end_step: {self._nsys_profile_end_step}'
         )
         self._has_nsys_enabled = False
+        nsys_bg_thread = NsysDownstream(
+            os.getenv('NSYS_LOG_DIR', None), os.getenv('GPU_KERN_STATS_OUTPUT_DIR', None), "stdev"
+        )
+        self.bg_runner = BackgroundRunner(nsys_bg_thread)
 
     def _rank_is_active(self, trainer):
         # TODO(@akoumparouli): is this function cache-able?
@@ -120,3 +127,5 @@ class NsysCallback(Callback):
             torch.cuda.cudart().cudaProfilerStop()
             torch.autograd.profiler.emit_nvtx().__exit__(None, None, None)
             self._has_nsys_enabled = False
+            self.bg_runner.start_background_task(args=None)
+            self.bg_runner.join_background_task()
