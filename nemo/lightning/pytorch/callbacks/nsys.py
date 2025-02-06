@@ -67,6 +67,7 @@ class NsysCallback(Callback):
             f'and end_step: {self._nsys_profile_end_step}'
         )
 
+        self._has_nsys_enabled = False
         import os
         from workload_inspector.bkg_runner import BackgroundRunner
         from workload_inspector.torch.nsys_downstream import NsysDownstream
@@ -89,8 +90,9 @@ class NsysCallback(Callback):
         device = trainer.strategy.root_device
         current_step = trainer.strategy.current_epoch_step
         if device.type == 'cuda':
-            if current_step == self._nsys_profile_start_step and get_rank() in self._nsys_profile_ranks:
+            if current_step == self._nsys_profile_start_step and get_rank() in self._nsys_profile_ranks and not self._has_nsys_enabled:
                 logging.info("====== Start nsys profiling ======")
+                self._has_nsys_enabled = True
                 torch.cuda.cudart().cudaProfilerStart()
                 if self._nsys_profile_gen_shape:
                     torch.autograd.profiler.emit_nvtx(record_shapes=True).__enter__()
@@ -106,9 +108,10 @@ class NsysCallback(Callback):
         device = trainer.strategy.root_device
         current_step = trainer.strategy.current_epoch_step
         if device.type == 'cuda':
-            if current_step == self._nsys_profile_end_step and get_rank() in self._nsys_profile_ranks:
+            if current_step == self._nsys_profile_end_step and get_rank() in self._nsys_profile_ranks and self._has_nsys_enabled:
                 logging.info("====== End nsys profiling ======")
                 torch.cuda.cudart().cudaProfilerStop()
                 torch.autograd.profiler.emit_nvtx().__exit__(None, None, None)
+                self._has_nsys_enabled = False
                 self.bg_runner.start_background_task(args=None)
                 self.bg_runner.join_background_task()
