@@ -64,7 +64,7 @@ class NsysCallback(Callback):
         self._nsys_profile_gen_shape = gen_shape
 
         logging.info(
-            f'Nsys profiling setup with start_step: {self._nsys_profile_start_step},'
+            f'Nsys profiling setup with workload inspector with start_step: {self._nsys_profile_start_step},'
             f'and end_step: {self._nsys_profile_end_step}'
         )
 
