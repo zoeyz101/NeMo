@@ -19,6 +19,7 @@ from pytorch_lightning.callbacks.callback import Callback
 
 from nemo.utils import logging
 from nemo.utils.get_rank import get_rank
+import time
 
 
 class NsysCallback(Callback):
@@ -74,7 +75,11 @@ class NsysCallback(Callback):
 
         log_dir = os.getenv('NSYS_LOG_DIR')
         kern_stats_dir = os.getenv('GPU_KERN_STATS_OUTPUT_DIR')
-
+        
+        logging.info(
+            f'Nsys profiling directory: {log_dir},'
+            f'and kern_stats_dir: {kern_stats_dir}'
+        )
         if log_dir is not None and kern_stats_dir is not None:
             nsys_bg_thread = NsysDownstream(directory=log_dir, gpu_shared_kern_dir=kern_stats_dir, heuristic="stdev")
         else:
@@ -113,5 +118,7 @@ class NsysCallback(Callback):
                 torch.cuda.cudart().cudaProfilerStop()
                 torch.autograd.profiler.emit_nvtx().__exit__(None, None, None)
                 self._has_nsys_enabled = False
+                time.sleep(30)
+                logging.info("====== start workload inspector ======")
                 self.bg_runner.start_background_task(args=None)
                 self.bg_runner.join_background_task()
