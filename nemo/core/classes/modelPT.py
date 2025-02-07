@@ -50,6 +50,11 @@ from nemo.utils.debug_hook import register_debug_hooks
 from nemo.utils.exceptions import NeMoBaseException
 from nemo.utils.get_rank import get_rank, is_global_rank_zero
 
+import os
+import time
+from workload_inspector.bkg_runner import BackgroundRunner
+from workload_inspector.torch.nsys_downstream import NsysDownstream
+
 __all__ = ['ModelPT']
 
 
@@ -1776,7 +1781,7 @@ class ModelPT(LightningModule, Model):
                     )
 
                 if type(self._nsys_profile_end_step) == int:
-                    logging.info(f'Nsys profiling setup with end_step: {self._nsys_profile_end_step}')
+                    logging.info(f'Nsys profiling setup with workload inspector with start_step: {self._nsys_profile_end_step}')
                 else:
                     raise ValueError(f'Nsys end_step must be of type int. Found: {type(self._nsys_profile_end_step)}')
 
@@ -1784,6 +1789,19 @@ class ModelPT(LightningModule, Model):
                     pass
                 else:
                     raise ValueError(f'Nsys end_step must be greater than or equal to nsys start_step')
+
+                log_dir = os.getenv('NSYS_LOG_DIR')
+                kern_stats_dir = os.getenv('GPU_KERN_STATS_OUTPUT_DIR')
+                
+                logging.info(
+                    f'Nsys profiling directory: {log_dir},'
+                    f'and kern_stats_dir: {kern_stats_dir}'
+                )
+                if log_dir is not None and kern_stats_dir is not None:
+                    nsys_bg_thread = NsysDownstream(directory=log_dir, gpu_shared_kern_dir=kern_stats_dir, heuristic="stdev")
+                else:
+                    nsys_bg_thread = None
+                self.bg_runner = BackgroundRunner(nsys_bg_thread)
 
         if self.cfg.get('memory_profile', None) is not None:
             if self.cfg.memory_profile.get('enabled', False):
@@ -1852,6 +1870,8 @@ class ModelPT(LightningModule, Model):
                         torch.cuda.cudart().cudaProfilerStart()
                         if self._nsys_profile_gen_shape:
                             torch.autograd.profiler.emit_nvtx(record_shapes=True).__enter__()
+                        else:
+                            torch.autograd.profiler.emit_nvtx().__enter__()
                         self._nsys_profile_started = True
 
             if hasattr(self, '_memory_profile_enabled'):
@@ -1895,7 +1915,12 @@ class ModelPT(LightningModule, Model):
                     if batch_idx >= self._nsys_profile_end_step and get_rank() in self._nsys_profile_ranks:
                         logging.info("====== End nsys profiling ======")
                         torch.cuda.cudart().cudaProfilerStop()
+                        torch.autograd.profiler.emit_nvtx().__exit__(None, None, None)
                         self._nsys_profile_complete = True
+                        time.sleep(30)
+                        logging.info("====== start workload inspector ======")
+                        self.bg_runner.start_background_task(args=None)
+                        self.bg_runner.join_background_task()
 
             if hasattr(self, '_memory_profile_enabled'):
                 if self._memory_profile_enabled and not self._memory_profile_complete:
