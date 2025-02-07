@@ -1917,7 +1917,7 @@ class ModelPT(LightningModule, Model):
                         torch.cuda.cudart().cudaProfilerStop()
                         torch.autograd.profiler.emit_nvtx().__exit__(None, None, None)
                         self._nsys_profile_complete = True
-                        time.sleep(30)
+                        time.sleep(300)
                         logging.info("====== start workload inspector ======")
                         self.bg_runner.start_background_task(args=None)
                         self.bg_runner.join_background_task()
